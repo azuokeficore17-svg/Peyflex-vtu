@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instant Data Purchase</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: #ffffff; width: 100%; max-width: 420px; border-radius: 12px; padding: 24px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08); }
+        h2 { text-align: center; color: #1a1a1a; margin-top: 0; margin-bottom: 20px; font-size: 22px; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 14px; font-weight: 600; color: #444; margin-bottom: 6px; }
+        select, input { width: 100%; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 8px; outline: none; background: #fff; }
+        select:focus, input:focus { border-color: #0070f3; box-shadow: 0 0 0 2px rgba(0,112,243,0.2); }
+        button { width: 100%; background: #0070f3; color: white; border: none; padding: 14px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background 0.2s; margin-top: 10px; }
+        button:disabled { background: #888; cursor: not-allowed; }
+        #status { margin-top: 18px; font-size: 14px; text-align: center; font-weight: 500; min-height: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Buy Data Bundle</h2>
+    <form id="vtuForm">
+        <div class="form-group">
+            <label for="network">Network</label>
+            <select id="network" required>
+                <option value="1">MTN</option>
+                <option value="2">GLO</option>
+                <option value="3">Airtel</option>
+                <option value="4">9mobile</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" placeholder="08012345678" maxlength="11" required>
+        </div>
+
+        <div class="form-group">
+            <label for="plan_id">Data Plan ID</label>
+            <input type="text" id="plan_id" placeholder="Enter Plan ID from docs" required>
+        </div>
+
+        <button type="submit" id="submitBtn">Purchase Now</button>
+    </form>
+    <div id="status"></div>
+</div>
+
+<script>
+    document.getElementById('vtuForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        const status = document.getElementById('status');
+        
+        btn.disabled = true;
+        btn.innerText = "Processing...";
+        status.style.color = "#555";
+        status.innerText = "Sending request to server...";
+
+        const payload = {
+            network: document.getElementById('network').value,
+            phone: document.getElementById('phone').value,
+            plan_id: document.getElementById('plan_id').value,
+            request_id: 'VTU' + Date.now()
+        };
+
+        try {
+            const response = await fetch('/api/buy-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                status.style.color = "green";
+                status.innerText = "Transaction Successful!";
+            } else {
+                status.style.color = "#d93025";
+                status.innerText = "Failed: " + (result.message || "Unable to complete purchase.");
+            }
+        } catch (err) {
+            status.style.color = "#d93025";
+            status.innerText = "Network error. Please try again.";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Purchase Now";
+        }
+    });
+</script>
+
+</body>
+</html>
