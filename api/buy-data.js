@@ -3,37 +3,38 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
-  const { network, phone, plan_id, request_id } = req.body;
+  const { network, mobile_number, plan_code } = req.body;
 
-  if (!network || !phone || !plan_id) {
+  if (!network || !mobile_number || !plan_code) {
     return res.status(400).json({ success: false, message: 'Missing required parameters' });
   }
 
   try {
-    const pexResponse = await fetch('https://peyflex.com.ng/api/v1/data', {
+    // Peyflex Data Top-Up Endpoint
+    const pexResponse = await fetch('https://client.peyflex.com.ng/api/data/topup/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.PEYFLEX_API_KEY}`
+        'Authorization': `Token ${process.env.PEYFLEX_API_KEY}`
       },
       body: JSON.stringify({
-        network,
-        phone,
-        plan_id,
-        request_id: request_id || Date.now().toString()
+        network: network.toLowerCase(),
+        mobile_number: mobile_number,
+        plan_code: plan_code
       })
     });
 
     const data = await pexResponse.json();
 
-    return res.status(200).json({
-      success: true,
-      data: data
-    });
+    if (pexResponse.ok) {
+      return res.status(200).json({ success: true, data });
+    } else {
+      return res.status(400).json({ success: false, message: data.message || 'Transaction failed', data });
+    }
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Server error connection to Peyflex',
+      message: 'Server connection error to Peyflex',
       error: error.message
     });
   }
