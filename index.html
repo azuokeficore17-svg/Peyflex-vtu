@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Instant Data Purchase</title>
+    <!-- Paystack Inline JS Library -->
+    <script src="https://js.paystack.co/v2/inline.js"></script>
     <style>
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -13,6 +15,7 @@
         label { display: block; font-size: 14px; font-weight: 600; color: #444; margin-bottom: 6px; }
         select, input { width: 100%; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 8px; outline: none; background: #fff; }
         select:focus, input:focus { border-color: #0070f3; box-shadow: 0 0 0 2px rgba(0,112,243,0.2); }
+        .price-tag { font-size: 14px; color: #0070f3; font-weight: 700; margin-top: 6px; }
         button { width: 100%; background: #0070f3; color: white; border: none; padding: 14px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background 0.2s; margin-top: 10px; }
         button:disabled { background: #888; cursor: not-allowed; }
         #status { margin-top: 18px; font-size: 14px; text-align: center; font-weight: 500; min-height: 20px; }
@@ -25,7 +28,7 @@
     <form id="vtuForm">
         <div class="form-group">
             <label for="network">Network</label>
-            <select id="network" required>
+            <select id="network" onchange="updatePlans()" required>
                 <option value="mtn">MTN</option>
                 <option value="glo">GLO</option>
                 <option value="airtel">Airtel</option>
@@ -39,55 +42,138 @@
         </div>
 
         <div class="form-group">
-            <label for="plan_code">Data Plan Code</label>
-            <input type="text" id="plan_code" placeholder="Enter Plan Code from Peyflex docs" required>
+            <label for="plan_code">Data Plan</label>
+            <select id="plan_code" onchange="displayPrice()" required>
+                <!-- Populated dynamically -->
+            </select>
+            <div id="priceDisplay" class="price-tag"></div>
         </div>
 
-        <button type="submit" id="submitBtn">Purchase Now</button>
+        <button type="submit" id="submitBtn">Pay & Get Data</button>
     </form>
     <div id="status"></div>
 </div>
 
 <script>
-    document.getElementById('vtuForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const btn = document.getElementById('submitBtn');
-        const status = document.getElementById('status');
-        
-        btn.disabled = true;
-        btn.innerText = "Processing...";
-        status.style.color = "#555";
-        status.innerText = "Sending request to server...";
+    // DEFINE YOUR PEYFLEX WHOLESALE PRICES HERE
+    // The code automatically applies +20% markup to generate retail pricing!
+    const PLAN_DATABASE = {
+        mtn: [
+            { code: "101", name: "MTN 1GB SME (30 Days)", wholesale: 240 },
+            { code: "102", name: "MTN 2GB SME (30 Days)", wholesale: 480 },
+            { code: "103", name: "MTN 5GB SME (30 Days)", wholesale: 1200 }
+        ],
+        glo: [
+            { code: "201", name: "Glo 1GB Corporate (30 Days)", wholesale: 230 },
+            { code: "202", name: "Glo 2GB Corporate (30 Days)", wholesale: 460 }
+        ],
+        airtel: [
+            { code: "301", name: "Airtel 1GB Gifting (30 Days)", wholesale: 250 }
+        ],
+        "9mobile": [
+            { code: "401", name: "9mobile 1GB (30 Days)", wholesale: 220 }
+        ]
+    };
 
-        const payload = {
-            network: document.getElementById('network').value,
-            mobile_number: document.getElementById('mobile_number').value,
-            plan_code: document.getElementById('plan_code').value
-        };
+    // +20% MARKUP MULTIPLIER
+    const MARKUP_MULTIPLIER = 1.20;
 
-        try {
-            const response = await fetch('/api/buy-data', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+    // Paste your Paystack Public Key here
+    const PAYSTACK_PUBLIC_KEY = "pk_test_YOUR_PAYSTACK_PUBLIC_KEY_HERE"; 
 
-            const result = await response.json();
+    function updatePlans() {
+        const network = document.getElementById('network').value;
+        const planSelect = document.getElementById('plan_code');
+        planSelect.innerHTML = '';
 
-            if (response.ok && result.success) {
-                status.style.color = "green";
-                status.innerText = "Transaction Successful!";
-            } else {
-                status.style.color = "#d93025";
-                status.innerText = "Failed: " + (result.message || "Unable to complete purchase.");
-            }
-        } catch (err) {
-            status.style.color = "#d93025";
-            status.innerText = "Network error. Please try again.";
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "Purchase Now";
+        const plans = PLAN_DATABASE[network] || [];
+        plans.forEach(plan => {
+            // Apply 20% margin and round up to the nearest Naira
+            const retailPrice = Math.ceil(plan.wholesale * MARKUP_MULTIPLIER);
+            
+            const opt = document.createElement('option');
+            opt.value = plan.code;
+            opt.dataset.wholesale = plan.wholesale;
+            opt.dataset.retail = retailPrice;
+            opt.innerText = `${plan.name} - ₦${retailPrice}`;
+            planSelect.appendChild(opt);
+        });
+        displayPrice();
+    }
+
+    function displayPrice() {
+        const planSelect = document.getElementById('plan_code');
+        const selected = planSelect.options[planSelect.selectedIndex];
+        if (selected) {
+            document.getElementById('priceDisplay').innerText = `Selling Price: ₦${selected.dataset.retail}`;
         }
+    }
+
+    // Initialize dropdown on page load
+    updatePlans();
+
+    document.getElementById('vtuForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const network = document.getElementById('network').value;
+        const mobile = document.getElementById('mobile_number').value;
+        const planSelect = document.getElementById('plan_code');
+        const selectedOpt = planSelect.options[planSelect.selectedIndex];
+        const retailPrice = parseFloat(selectedOpt.dataset.retail);
+        const planCode = selectedOpt.value;
+
+        if (mobile.length < 11) {
+            alert("Please enter a valid 11-digit phone number.");
+            return;
+        }
+
+        const customerEmail = `${mobile}@customer.vtu`;
+
+        const popup = new PaystackPop();
+        popup.newTransaction({
+            key: PAYSTACK_PUBLIC_KEY,
+            email: customerEmail,
+            amount: retailPrice * 100, // Kobo conversion
+            currency: "NGN",
+            metadata: {
+                network: network,
+                mobile_number: mobile,
+                plan_code: planCode
+            },
+            onSuccess: async function(transaction) {
+                const status = document.getElementById('status');
+                status.style.color = "blue";
+                status.innerText = "Payment verified! Dispatching data...";
+
+                try {
+                    const res = await fetch('/api/buy-data', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            reference: transaction.reference,
+                            network: network,
+                            mobile_number: mobile,
+                            plan_code: planCode
+                        })
+                    });
+
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        status.style.color = "green";
+                        status.innerText = "Success! Data credited successfully.";
+                    } else {
+                        status.style.color = "red";
+                        status.innerText = "Delivery Issue: " + (data.message || "Contact support with Ref: " + transaction.reference);
+                    }
+                } catch (err) {
+                    status.style.color = "red";
+                    status.innerText = "Connection error. Contact support with Ref: " + transaction.reference;
+                }
+            },
+            onCancel: function() {
+                alert('Payment cancelled.');
+            }
+        });
     });
 </script>
 
